@@ -1,0 +1,6 @@
+# Discord Text Feed Bot Dependencies
+# Python 3.9+ required for type hints and f-strings
+
+discord.py>=2.3.0
+pyyaml>=6.0
+python-dotenv>=1.0.0
