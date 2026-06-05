@@ -102,17 +102,24 @@ class FileReader:
             is_header_marker = skip_header and self._is_pg_header(line)
             is_footer_marker = skip_footer and self._is_pg_footer(line)
 
-            if is_header_marker:
-                line_lower = line.lower()
-                if "start of this" in line_lower or "beginning of" in line_lower:
+            # Check if this is the end marker for header (e.g., "start of this publication")
+            line_lower = line.lower()
+            is_end_of_header = ("start of this" in line_lower or "beginning of" in line_lower)
+
+            if is_header_marker and not in_header:
+                # First header marker encountered - start skipping
+                in_header = True
+                continue  # Skip the first header marker line
+
+            if is_header_marker and in_header:
+                # We're inside header section, check if this ends it
+                if is_end_of_header:
                     in_header = False
-                continue
+                    result.append(line)  # Include the end marker line
+                continue  # Skip other header markers while in header
 
             if is_footer_marker:
                 break
-
-            if in_header:
-                continue
 
             result.append(line)
 
@@ -341,12 +348,12 @@ class FileReader:
         if any(c in stripped for c in '"\''):
             return False
 
-        # Common character name patterns: centered with dashes, or just capitalized
-        # (Note: check original line parameter for leading spaces)
-        if line.startswith("  ") or stripped.startswith("-"):
+        # Common character name patterns: centered with dashes, or indented
+        # Only accept as character name if it has special formatting (centered/indented)
+        if line.startswith("  ") or stripped.startswith("-") or len(line) > len(stripped):
             return True
 
-        return True
+        return False
 
     def get_content_count(self) -> int:
         """Return total number of content units available after processing.

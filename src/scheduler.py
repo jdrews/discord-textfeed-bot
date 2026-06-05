@@ -81,11 +81,10 @@ class InjectionScheduler:
 
                         for i, chunk in enumerate(chunks):
                             success = await self.inject_content(index, chunk)
-                            index += 1
 
-                            # Advance queue after successful send
-                            if success:
-                                self._queue.advance()
+                        # Advance queue once after all chunks are sent successfully
+                        if len(chunks) > 0:
+                            self._queue.advance()
 
             except asyncio.CancelledError:
                 break

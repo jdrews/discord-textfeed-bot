@@ -33,15 +33,26 @@ def setup_logging(config):
     log_path = Path(config.log_file).parent
     log_path.mkdir(parents=True, exist_ok=True)
 
-    # Configure root logger
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(config.log_file),
-            logging.StreamHandler(sys.stdout)
-        ]
+    # Get root logger and configure handlers (don't use basicConfig to avoid resetting)
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    file_handler = logging.FileHandler(config.log_file)
+    file_handler.setLevel(log_level)
+    
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(log_level)
+    
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+    
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(stream_handler)
+    root_logger.setLevel(log_level)
 
 
 class TextFeedBot:
@@ -153,32 +164,23 @@ class TextFeedBot:
         
         try:
             await self._discord_client.fetch_channel(self.config.discord_channel_id)
-            logger.info(f"Channel validated: {self.config.discord_channel_id}")
+            logger.info("Channel validated successfully")
         except discord.NotFound:
             logging.error(
-                f"Invalid channel ID: {self.config.discord_channel_id}. "
-                "Channel not found on Discord server."
+                "Invalid channel ID. Channel not found on Discord server."
             )
             raise ValueError(
-                f"Invalid channel ID: {self.config.discord_channel_id}. "
-                "Channel not found. Please verify the channel ID is correct."
+                "Invalid channel ID. Channel not found. Please verify the channel ID is correct."
             )
         except discord.Forbidden:
-            logging.error(
-                f"Forbidden access to channel: {self.config.discord_channel_id}"
-            )
+            logging.error("Forbidden access to channel")
             raise ValueError(
-                f"Bot does not have permission to access channel: "
-                f"{self.config.discord_channel_id}. Please verify bot permissions."
+                "Bot does not have permission to access channel. "
+                "Please verify bot permissions."
             )
         except Exception as e:
-            logging.error(
-                f"Error validating channel: {e}"
-            )
-            raise ValueError(
-                f"Invalid channel ID: {self.config.discord_channel_id}. "
-                f"Error: {e}"
-            )
+            logging.error(f"Error validating channel: {e}")
+            raise ValueError(f"Invalid channel ID. Error: {e}")
 
     async def _start_scheduler(self, logger, config) -> None:
         """Start the injection scheduler."""

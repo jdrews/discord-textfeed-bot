@@ -214,7 +214,8 @@ class MessageQueue:
             self._total_units = len(self._content_units)
             self._current_index = 0
 
-    def enforce_character_limit(self, unit: str, max_length: int = DISCORD_MESSAGE_MAX_LENGTH) -> List[str]:
+    @staticmethod
+    def enforce_character_limit(unit: str, max_length: int = DISCORD_MESSAGE_MAX_LENGTH) -> List[str]:
         """Enforce Discord's message length limit by splitting long content.
 
         Args:
@@ -225,19 +226,18 @@ class MessageQueue:
             List of strings - either the original unit if within limit,
             or multiple shorter units that sum to the original length.
         """
-        with self._lock:
-            if len(unit) <= max_length:
-                return [unit]
+        if len(unit) <= max_length:
+            return [unit]
 
-            # Split long content into chunks
-            result = []
-            start = 0
-            while start < len(unit):
-                end = min(start + max_length, len(unit))
-                result.append(unit[start:end])
-                start = end
+        # Split long content into chunks
+        result = []
+        start = 0
+        while start < len(unit):
+            end = min(start + max_length, len(unit))
+            result.append(unit[start:end])
+            start = end
 
-            return result
+        return result
 
 
 def create_message_queue(content_units: List[str]) -> MessageQueue:

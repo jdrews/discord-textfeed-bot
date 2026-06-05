@@ -418,28 +418,37 @@ def get_discord_token() -> str:
     return token
 
 
-def get_channel_id() -> int:
+def get_channel_id(config_path: str = "config.yaml") -> int:
     """Get target channel ID from configuration.
+
+    Args:
+        config_path: Path to the configuration file. Defaults to "config.yaml".
 
     Returns:
         Target Discord channel ID as integer.
     """
-    return ConfigLoader("config.yaml").get_channel_id()
+    return ConfigLoader(config_path).get_channel_id()
 
 
-def get_source_file_path() -> Path:
+def get_source_file_path(config_path: str = "config.yaml") -> Path:
     """Get path to source text file from configuration.
+
+    Args:
+        config_path: Path to the configuration file. Defaults to "config.yaml".
 
     Returns:
         Path object pointing to the source text file.
     """
-    return ConfigLoader("config.yaml").get_source_file_path()
+    return ConfigLoader(config_path).get_source_file_path()
 
 
-def get_interval_seconds() -> int:
+def get_interval_seconds(config_path: str = "config.yaml") -> int:
     """Get injection interval in seconds from configuration.
+
+    Args:
+        config_path: Path to the configuration file. Defaults to "config.yaml".
 
     Returns:
         Base seconds between injections.
     """
-    return ConfigLoader("config.yaml").get_interval_seconds()
+    return ConfigLoader(config_path).get_interval_seconds()
