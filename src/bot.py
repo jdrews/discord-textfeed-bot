@@ -17,7 +17,7 @@ from discord.errors import (
 from src.config_loader import load_config, get_discord_token
 from src.file_reader import FileReader
 from src.message_queue import MessageQueue
-from src.scheduler import SchedulerManager
+from src.scheduler import SchedulerManager, set_discord_client
 
 
 # Configure logging
@@ -58,18 +58,26 @@ def setup_logging(config):
 class TextFeedBot:
     """Discord bot that reads lines from a text file and injects them into Discord."""
 
-    def __init__(self):
-        """Initialize the bot with default configuration."""
+    def __init__(self, config_path: str = "config.yaml"):
+        """Initialize the bot with default configuration.
+        
+        Args:
+            config_path: Path to the configuration file (e.g., 'config.test.yaml').
+        """
         self.config = None
         self._file_reader: Optional[FileReader] = None
         self._queue: Optional[MessageQueue] = None
         self._scheduler: Optional[SchedulerManager] = None
         self._discord_client: Optional[discord.Client] = None
 
-    async def start(self) -> None:
-        """Start the bot and all components."""
+    async def start(self, config_path: str = "config.yaml") -> None:
+        """Start the bot and all components.
+        
+        Args:
+            config_path: Path to the configuration file.
+        """
         # Load configuration
-        self.config = load_config("config.yaml")
+        self.config = load_config(config_path)
 
         # Set up logging
         setup_logging(self.config)
@@ -77,24 +85,51 @@ class TextFeedBot:
         logger.info("Bot starting...")
 
         try:
-            # Initialize Discord client with proper intents
-            intents = discord.Intents.default()
-            intents.message_content = True  # Required for reading messages if needed
+            # Initialize Discord client with minimal intents (this bot only sends messages)
+            intents = discord.Intents()
+            # Note: message_content is disabled - this bot doesn't read messages, only sends them
             self._discord_client = discord.Client(intents=intents)
+
+            # Set the global discord client for scheduler to use
+            set_discord_client(self._discord_client)
 
             # Start file reader and message queue
             await self._setup_file_reader(logger)
 
-            # Validate channel exists before starting scheduler
-            await self._validate_channel(logger)
-
-            # Start scheduler
-            await self._start_scheduler(logger, self.config)
-
-            # Run the bot
+            # Run the bot (connects first, then we validate channel after connection)
             logger.info(f"Connecting to Discord...")
-            await self._discord_client.start(get_discord_token())
-            logger.info("Connected to Discord. Starting message injection.")
+            
+            async def run_client():
+                await self._discord_client.start(get_discord_token())
+                logger.info("Discord client connected.")
+            
+            asyncio.create_task(run_client())
+            
+            # Wait for the client to be fully ready before proceeding (with timeout)
+            try:
+                await asyncio.wait_for(asyncio.sleep(30), timeout=30)
+            except asyncio.TimeoutError:
+                pass
+            
+            logger.info("Connected to Discord.")
+
+            # Validate channel exists now that we're connected
+            await self._validate_channel(logger)
+            logger.info("Channel validated successfully")
+
+            # Start scheduler after validation
+            self._scheduler = SchedulerManager(
+                interval_seconds=self.config.interval_seconds,
+                randomization_seconds=self.config.randomization_seconds
+            )
+            
+            self._scheduler.set_queue(self._queue)
+            await self._scheduler.start()
+            logger.info("Scheduler started successfully")
+
+            # Keep the bot running - create a task that stays alive
+            logger.info("Bot is now running. Press Ctrl+C to stop.")
+            await asyncio.sleep(float('inf'))  # Keep event loop running
 
         except Exception as e:
             logging.error(f"Bot startup failed: {e}")
@@ -216,13 +251,21 @@ class TextFeedBot:
 class BotRunner:
     """Manages bot lifecycle with signal handling for graceful shutdown."""
 
-    def __init__(self):
-        """Initialize the bot runner."""
-        self.bot = TextFeedBot()
+    def __init__(self, config_path: str = "config.yaml"):
+        """Initialize the bot runner.
+        
+        Args:
+            config_path: Path to the configuration file.
+        """
+        self.bot = TextFeedBot(config_path)
         self._running = False
 
-    async def run(self) -> None:
-        """Run the bot with signal handling for graceful shutdown."""
+    async def run(self, config_path: str = "config.yaml") -> None:
+        """Run the bot with signal handling for graceful shutdown.
+        
+        Args:
+            config_path: Path to the configuration file (overrides __init__ value).
+        """
         # Set up signal handlers
         loop = asyncio.get_event_loop()
 
@@ -239,7 +282,7 @@ class BotRunner:
 
         try:
             self._running = True
-            await self.bot.start()
+            await self.bot.start(config_path)
         except Exception as e:
             logging.error(f"Bot error during run: {e}")
             raise
@@ -248,18 +291,25 @@ class BotRunner:
                 await self.bot.stop()
 
 
-async def main():
-    """Main entry point for the bot."""
-    runner = BotRunner()
-    await runner.run()
+async def main(config_path: str = "config.yaml"):
+    """Main entry point for the bot.
+
+    Args:
+        config_path: Path to the configuration file.
+    """
+    runner = BotRunner(config_path)
+    await runner.run(config_path)
 
 
-def run_bot():
+def run_bot(config_path: str = "config.yaml"):
     """Entry point that handles signal handling.
+
+    Args:
+        config_path: Path to the configuration file.
 
     This function can be called directly from command line or as a module.
     """
-    asyncio.run(main())
+    asyncio.run(main(config_path))
 
 
 if __name__ == "__main__":

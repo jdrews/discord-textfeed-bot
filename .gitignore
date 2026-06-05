@@ -1,2 +1,6 @@
 test-artifacts/
 **/*.pyc
+config.test.yaml
+.env
+logs/
+test.notes.txt

@@ -2,7 +2,21 @@
 
 import asyncio
 import logging
+import os
 from typing import List, Optional
+
+# Module-level variable to store Discord client (set by bot.py)
+_discord_client = None
+
+
+def set_discord_client(client):
+    """Set the global Discord client instance.
+    
+    Args:
+        client: discord.Client instance
+    """
+    global _discord_client
+    _discord_client = client
 
 
 class InjectionScheduler:
@@ -132,9 +146,6 @@ class InjectionScheduler:
 async def inject_content(index: int, content_unit: str) -> bool:
     """Send a single content unit to Discord channel. Logs operation only.
 
-    This is a placeholder function that should be implemented in bot.py
-    where the actual Discord client integration occurs with proper error handling.
-
     Args:
         index: The index of the content unit being sent.
         content_unit: The actual content string to send.
@@ -142,8 +153,29 @@ async def inject_content(index: int, content_unit: str) -> bool:
     Returns:
         True if sent successfully, False otherwise.
     """
-    # Placeholder - actual implementation in bot.py
-    return True
+    from discord.errors import Forbidden, HTTPException, DiscordServerError
+    
+    global _discord_client
+    
+    try:
+        # Get channel ID from environment or config (passed via global state)
+        channel_id = int(os.environ.get('DISCORD_CHANNEL_ID', '1512494428013723649'))
+        
+        if _discord_client is None:
+            logging.error("Discord client not set. Call set_discord_client() first.")
+            return False
+        
+        # Fetch the channel and send message
+        channel = await _discord_client.fetch_channel(channel_id)
+        await channel.send(content_unit)
+        
+        return True
+    except (Forbidden, HTTPException, DiscordServerError) as e:
+        logging.error(f"Failed to inject content {index}: {e}")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error injecting content {index}: {e}")
+        return False
 
 
 class SchedulerManager:
