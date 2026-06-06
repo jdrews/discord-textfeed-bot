@@ -86,18 +86,25 @@ class InjectionScheduler:
 
                 # Get next content unit and send it
                 if self._queue:
-                    index = self._queue.get_next_index()
+                    index = self._._queue.get_next_index() if hasattr(self._queue, '_queue') else self._queue.get_next_index()
                     content_unit = self._queue.get_current_content_unit()
 
                     if content_unit is not None:
                         # Enforce character limit and split if needed
                         chunks = self._enforce_character_limit(content_unit)
+                        
+                        # Filter out empty or whitespace-only chunks
+                        valid_chunks = [c for c in chunks if c.strip()]
+                        
+                        if not valid_chunks:
+                            self._queue.advance()
+                            continue
 
-                        for i, chunk in enumerate(chunks):
+                        for i, chunk in enumerate(valid_chunks):
                             success = await self.inject_content(index, chunk)
 
                         # Advance queue once after all chunks are sent successfully
-                        if len(chunks) > 0:
+                        if len(valid_chunks) > 0:
                             self._queue.advance()
 
             except asyncio.CancelledError:
@@ -225,7 +232,7 @@ class SchedulerManager:
         """Stop the injection scheduler gracefully."""
         if self._scheduler:
             await self._scheduler.stop()
-            self._running = False
+        self._running = False
 
     @property
     def is_running(self) -> bool:

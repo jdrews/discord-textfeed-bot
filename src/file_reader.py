@@ -23,6 +23,36 @@ class FileReader:
         "*** end of project gutenberg source file ***",
     ]
 
+    # Patterns that indicate the START of header content (to detect when to begin skipping)
+    PG_HEADER_START_PATTERNS = [
+        r"^the\s+project\s+gutenberg\s+ebook",  # "The Project Gutenberg eBook"
+        r"^title:",  # Title line
+        r"^author:",  # Author line
+        r"^release\s+date:",  # Release date
+    ]
+
+    # Patterns that indicate the END of header content (when to stop skipping)
+    PG_HEADER_END_PATTERNS = [
+        "beginning of",  # "Beginning of this publication"
+    ]
+
+    # Patterns that indicate legal/license content (not character names)
+    LICENSE_CONTENT_PATTERNS = [
+        r"^\s*\d+\.\s*[A-Z]",  # Numbered sections like "1.C.", "2.1."
+        r"\(the\s+[A-Za-z]+\)",  # "(the Foundation", "(the Licensee)" etc.
+        r"[\"']?the\s+[a-zA-Z]+[,\)]?",  # "the Project Gutenberg Literary Archive Foundation"
+        r"^literary archive foundation",  # "Literary Archive Foundation" (case-insensitive)
+        r"^project gutenberg literary archive foundation",  # Full organization name
+        r"www\.gutenberg\.org",  # URLs
+        r"\(ebook\s+\d+\)",  # eBook numbers like "(eBook #844)"
+        r"release\s+date:",  # Release date lines
+        r"most\s+recently\s+updated:",  # Update dates
+        r"language:\s*[a-z]+",  # Language declarations
+        r"other\s+information",  # Other information lines
+        r"credits:",  # Credits section
+        r"\.foundation\.",  # ". Foundation." (trailing punctuation)
+    ]
+
     def __init__(self, path: Path):
         """Initialize with the path to the source text file.
 
@@ -30,7 +60,8 @@ class FileReader:
             path: Path object pointing to the UTF-8 encoded text file.
         """
         self.path = path
-        self._lines: List[str] = []
+        self._raw_lines: List[str] = []  # Raw lines from file (before filtering)
+        self._filtered_lines: List[str] = []  # Filtered lines (after header/footer removal)
         self._content_units: Optional[List[str]] = None
         self._injection_mode: str = "line"
 
@@ -67,15 +98,15 @@ class FileReader:
         normalized_content = raw_content.replace("\r\n", "\n").replace("\r", "\n")
 
         # Split into lines, preserving empty lines for paragraph grouping
-        self._lines = normalized_content.split("\n")
-        if self._lines and self._lines[-1] == "":
-            self._lines.pop()
+        self._raw_lines = normalized_content.split("\n")
+        if self._raw_lines and self._raw_lines[-1] == "":
+            self._raw_lines.pop()
 
         # Filter header/footer sections if requested
-        filtered_lines = self._filter_header_footer(self._lines, skip_header, skip_footer)
+        self._filtered_lines = self._filter_header_footer(self._raw_lines, skip_header, skip_footer)
 
         # Apply start/end line filtering with validation
-        filtered_lines = self._apply_line_range(filtered_lines, start_line, end_line)
+        filtered_lines = self._apply_line_range(self._filtered_lines, start_line, end_line)
 
         return filtered_lines
 
@@ -97,33 +128,68 @@ class FileReader:
 
         result = []
         in_header = False
-
+        
         for line in lines:
             is_header_marker = skip_header and self._is_pg_header(line)
             is_footer_marker = skip_footer and self._is_pg_footer(line)
-
-            # Check if this is the end marker for header (e.g., "start of this publication")
+            
+            # Check if this is the start of header content (beginning of license/title page)
             line_lower = line.lower()
-            is_end_of_header = ("start of this" in line_lower or "beginning of" in line_lower)
-
-            if is_header_marker and not in_header:
-                # First header marker encountered - start skipping
+            is_start_of_header = any(
+                self._match_pattern(pattern, line_lower) for pattern in self.PG_HEADER_START_PATTERNS
+            )
+    
+            # Check if this is the end marker for header (e.g., "beginning of this publication" or "start of...")
+            is_end_of_header = ("beginning of" in line_lower or "start of" in line_lower)
+    
+            if is_start_of_header and not in_header:
+                # First header content encountered - start skipping
                 in_header = True
-                continue  # Skip the first header marker line
-
+                continue  # Skip the first header content line
+    
+            if is_header_marker and not in_header:
+                # Header marker before any content - also skip
+                in_header = True
+                continue
+    
+            # Check if we're in header section and this line ends it
+            if in_header and is_end_of_header:
+                result.append(line)  # Include the end marker line
+                in_header = False  # Exit header mode after finding end marker
+                continue
+            
+            if is_header_marker and not in_header:
+                # Header marker before any content - also skip
+                in_header = True
+                continue
+            
             if is_header_marker and in_header:
-                # We're inside header section, check if this ends it
-                if is_end_of_header:
-                    in_header = False
-                    result.append(line)  # Include the end marker line
-                continue  # Skip other header markers while in header
-
+                # We're inside header section, skip this line
+                continue
+            
             if is_footer_marker:
                 break
-
+            
+            # Skip lines that are part of license text (between header markers and footer)
+            if skip_header and in_header:
+                continue
+            
             result.append(line)
 
         return result
+
+    def _match_pattern(self, pattern: str, text: str) -> bool:
+        """Match a regex pattern against text.
+        
+        Args:
+            pattern: Regex pattern to match.
+            text: Text to search in.
+            
+        Returns:
+            True if pattern matches the text.
+        """
+        import re
+        return bool(re.search(pattern, text))
 
     def _is_pg_header(self, line: str) -> bool:
         """Check if a line is a Project Gutenberg header marker.
@@ -319,8 +385,9 @@ class FileReader:
         Character names typically:
         - Are on their own line
         - Start with capital letter(s)
-        - May be centered (surrounded by spaces or dashes)
+        - May end with period or colon
         - Don't contain dialogue markers like quotes
+        - Don't look like legal/license content
 
         Args:
             line: A single line to check.
@@ -334,7 +401,15 @@ class FileReader:
         if not stripped or stripped.startswith("(") or stripped.startswith("["):
             return False
 
+        # Check against license content patterns - these are NOT character names
+        # Use case-insensitive matching by lowercasing both the pattern and text
+        for pattern in cls.LICENSE_CONTENT_PATTERNS:
+            import re
+            if re.search("(?i)" + pattern, line):
+                return False
+
         # Character names are typically 1-3 words, capitalized
+        # May end with period or colon (e.g., "ALGERNON." or "LANE:")
         words = stripped.split()
         if not words or len(words) > 3:
             return False
@@ -347,6 +422,12 @@ class FileReader:
         # Check that it doesn't look like dialogue or narration
         if any(c in stripped for c in '"\''):
             return False
+
+        # Additional check: if it's all caps with periods, it's likely a character name
+        # Remove trailing punctuation for the check
+        clean_first_word = first_word.rstrip('.:')
+        if clean_first_word.isupper() and len(clean_first_word) > 1:
+            return True
 
         # Common character name patterns: centered with dashes, or indented
         # Only accept as character name if it has special formatting (centered/indented)
@@ -405,8 +486,13 @@ class FileReader:
 
     @property
     def lines(self) -> List[str]:
-        """Get the list of raw lines from the file."""
-        return self._lines.copy()
+        """Get the list of raw lines from the file (before filtering)."""
+        return self._raw_lines.copy()
+
+    @property
+    def filtered_lines(self) -> List[str]:
+        """Get the list of filtered lines (after header/footer removal)."""
+        return self._filtered_lines.copy()
 
     @property
     def injection_mode(self) -> str:
