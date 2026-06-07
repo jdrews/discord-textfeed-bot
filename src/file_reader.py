@@ -206,9 +206,9 @@ class FileReader:
                     result.append("\n".join(current_scene))
                     current_scene.clear()
 
-                # Add character name as separate unit for dialogue injection
+                # Add character name to current scene so it combines with dialogue
                 char_name = stripped.rstrip(":")
-                result.append(f"[CHARACTER: {char_name}]")
+                current_scene.append(char_name)
                 in_dialogue_block = True
             elif stripped.startswith("(") or stripped.startswith("["):
                 # Stage direction - add to current scene if we're in a dialogue block
