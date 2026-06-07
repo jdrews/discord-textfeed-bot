@@ -45,8 +45,9 @@ class TestMessageQueue:
         assert queue.get_next_index() == 1
         assert queue.advance() is True
         assert queue.get_next_index() == 2
-        # After advancing past the last unit, advance returns False
-        assert queue.advance() is False
+        # After advancing past the last unit, wraps around to beginning and returns True
+        assert queue.advance() is True
+        assert queue.get_next_index() == 0
 
     def test_reset_position(self):
         """Test resetting position to start."""
@@ -76,9 +77,9 @@ class TestMessageQueue:
         queue.advance()
         assert queue.get_remaining_units() == 1
         
-        # Advance past the last one - now at end, 0 remaining
+        # Advance past the last one - wraps around to beginning, all 3 units remain
         queue.advance()
-        assert queue.get_remaining_units() == 0
+        assert queue.get_remaining_units() == 3
 
     def test_get_progress(self):
         """Test getting progress percentage."""
@@ -96,25 +97,26 @@ class TestMessageQueue:
         queue.advance()
         assert queue.get_progress() == 66.67
         
-        # Advance past all units - now at end, 100% complete
+        # Advance past all units - wraps around to beginning, progress resets to 0%
         queue.advance()
-        assert queue.get_progress() == 100.0
+        assert queue.get_progress() == 0.0
 
     def test_is_complete(self):
         """Test checking if all content has been sent."""
         units = ["unit 1", "unit 2"]
         queue = MessageQueue(units)
 
-        # Not complete yet
+        # Not complete yet (queue still has content)
         assert queue.is_complete() is False
         
         # Advance through both units (now at last unit, not complete yet)
         queue.advance()
         assert queue.is_complete() is False
         
-        # After advancing past the last one, complete
+        # After advancing past the last one, wraps around - still not complete
+        # Queue is only "complete" when it has no content (_total_units == 0)
         queue.advance()
-        assert queue.is_complete() is True
+        assert queue.is_complete() is False
 
     def test_set_content_units(self):
         """Test setting new content units."""

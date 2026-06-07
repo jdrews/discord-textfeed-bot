@@ -126,20 +126,19 @@ class MessageQueue:
 
     def advance(self) -> bool:
         """Advance to the next content unit (thread-safe).
-
+        
         Returns:
-            True if advanced successfully, False if at end of queue.
+            True if advanced successfully, False if queue is empty.
         """
         with self._lock:
-            # Check if we're already past all units (completed state)
-            if self._total_units == 0 or self._current_index >= self._total_units:
+            if self._total_units == 0:
                 return False
             
-            # If we are at the last unit, advance to total_units but return False
+            # If we are at the last unit, wrap around to the beginning
             if self._current_index >= self._total_units - 1:
-                self._current_index = self._total_units
-                return False
-
+                self._current_index = 0
+                return True
+            
             # Move to next unit
             self._current_index += 1
             return True
@@ -195,13 +194,13 @@ class MessageQueue:
 
     def is_complete(self) -> bool:
         """Check if all content has been sent (thread-safe).
-
+        
         Returns:
             True if all units have been completed/sent.
         """
         with self._lock:
-            # Complete when we've reached the end of the queue
-            return self._current_index >= self._total_units
+            # Complete when the queue is empty
+            return self._total_units == 0
 
     def set_content_units(self, units: List[str]) -> None:
         """Set new content units in the queue (thread-safe).
@@ -283,7 +282,7 @@ def advance_queue(queue: MessageQueue) -> bool:
         queue: The message queue instance.
 
     Returns:
-        True if advanced successfully, False if at end of queue.
+        True if advanced successfully, False if queue is empty.
     """
     return queue.advance()
 

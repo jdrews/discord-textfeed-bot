@@ -103,12 +103,12 @@ class FileReader:
             self._raw_lines.pop()
 
         # Filter header/footer sections if requested
-        self._filtered_lines = self._filter_header_footer(self._raw_lines, skip_header, skip_footer)
-
+        filtered_lines = self._filter_header_footer(self._raw_lines, skip_header, skip_footer)
+        
         # Apply start/end line filtering with validation
-        filtered_lines = self._apply_line_range(self._filtered_lines, start_line, end_line)
-
-        return filtered_lines
+        self._filtered_lines = self._apply_line_range(filtered_lines, start_line, end_line)
+        
+        return self._filtered_lines
 
     def _filter_header_footer(
         self, lines: List[str], skip_header: bool, skip_footer: bool
@@ -127,53 +127,28 @@ class FileReader:
             return lines
 
         result = []
-        in_header = False
+        found_start_marker = False
+        found_end_marker = False
         
         for line in lines:
-            is_header_marker = skip_header and self._is_pg_header(line)
-            is_footer_marker = skip_footer and self._is_pg_footer(line)
+            # Check for Project Gutenberg START/END markers
+            line_lower = line.lower().strip()
             
-            # Check if this is the start of header content (beginning of license/title page)
-            line_lower = line.lower()
-            is_start_of_header = any(
-                self._match_pattern(pattern, line_lower) for pattern in self.PG_HEADER_START_PATTERNS
-            )
-    
-            # Check if this is the end marker for header (e.g., "beginning of this publication" or "start of...")
-            is_end_of_header = ("beginning of" in line_lower or "start of" in line_lower)
-    
-            if is_start_of_header and not in_header:
-                # First header content encountered - start skipping
-                in_header = True
-                continue  # Skip the first header content line
-    
-            if is_header_marker and not in_header:
-                # Header marker before any content - also skip
-                in_header = True
-                continue
-    
-            # Check if we're in header section and this line ends it
-            if in_header and is_end_of_header:
-                result.append(line)  # Include the end marker line
-                in_header = False  # Exit header mode after finding end marker
-                continue
+            if skip_header and self._is_pg_start_marker(line):
+                # Found the start marker - everything after this is content (until end marker)
+                found_start_marker = True
+                continue  # Skip the start marker line itself
             
-            if is_header_marker and not in_header:
-                # Header marker before any content - also skip
-                in_header = True
-                continue
-            
-            if is_header_marker and in_header:
-                # We're inside header section, skip this line
-                continue
-            
-            if is_footer_marker:
+            if skip_footer and self._is_pg_end_marker(line):
+                # Found the end marker - stop processing here
+                found_end_marker = True
                 break
             
-            # Skip lines that are part of license text (between header markers and footer)
-            if skip_header and in_header:
-                continue
+            # If we haven't seen a start marker yet, this is header content to skip
+            if not found_start_marker:
+                continue  # Skip all pre-start-marker lines (metadata, license, etc.)
             
+            # After seeing start marker but before end marker, include content
             result.append(line)
 
         return result
@@ -445,7 +420,7 @@ class FileReader:
         if self._content_units is None:
             # Group the stored lines by injection mode (lazy evaluation)
             self._content_units = self.group_by_injection_mode(
-                self._lines, self._injection_mode
+                self._filtered_lines, self._injection_mode
             )
         return len(self._content_units)
 
@@ -461,9 +436,9 @@ class FileReader:
         if self._content_units is None:
             # Group the stored lines by injection mode (lazy evaluation)
             self._content_units = self.group_by_injection_mode(
-                self._lines, self._injection_mode
+                self._filtered_lines, self._injection_mode
             )
-
+        
         if 0 <= index < len(self._content_units):
             return self._content_units[index]
         return None

@@ -102,14 +102,17 @@ class TestMessageQueueIntegration:
             assert queue.get_total_units() == 5
             assert queue.get_next_index() == 0
             
-            # Advance through all units
-            for i in range(5):
+            # Advance through all units (with looping behavior)
+            for i in range(6):  # One extra to test wrapping
+                result = queue.advance()
                 if i < 4:
-                    assert queue.advance() is True
+                    assert result is True, f"Should advance on iteration {i}"
                 else:
-                    assert queue.advance() is False
+                    # After last unit, wraps around and returns True
+                    assert result is True, f"Should wrap around on iteration {i}"
             
-            assert queue.is_complete() is True
+            # Queue should not be complete (still has content)
+            assert queue.is_complete() is False
         finally:
             os.unlink(temp_path)
 
