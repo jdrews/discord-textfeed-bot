@@ -7,52 +7,6 @@ from typing import List, Optional
 class FileReader:
     """Read UTF-8 encoded text files with filtering and grouping capabilities."""
 
-    # Project Gutenberg header/footer markers for detection (word-based matching)
-    PG_HEADER_MARKERS = [
-        "beginning of this publication",
-        "project gutenberg license",
-        "terms of use",
-        "table of contents",
-        "start of this project gutenberg ebook",
-    ]
-
-    PG_FOOTER_MARKERS = [
-        "end of this publication",
-        "project gutenberg license",
-        "terms of use",
-        "*** end of project gutenberg source file ***",
-    ]
-
-    # Patterns that indicate the START of header content (to detect when to begin skipping)
-    PG_HEADER_START_PATTERNS = [
-        r"^the\s+project\s+gutenberg\s+ebook",  # "The Project Gutenberg eBook"
-        r"^title:",  # Title line
-        r"^author:",  # Author line
-        r"^release\s+date:",  # Release date
-    ]
-
-    # Patterns that indicate the END of header content (when to stop skipping)
-    PG_HEADER_END_PATTERNS = [
-        "beginning of",  # "Beginning of this publication"
-    ]
-
-    # Patterns that indicate legal/license content (not character names)
-    LICENSE_CONTENT_PATTERNS = [
-        r"^\s*\d+\.\s*[A-Z]",  # Numbered sections like "1.C.", "2.1."
-        r"\(the\s+[A-Za-z]+\)",  # "(the Foundation", "(the Licensee)" etc.
-        r"[\"']?the\s+[a-zA-Z]+[,\)]?",  # "the Project Gutenberg Literary Archive Foundation"
-        r"^literary archive foundation",  # "Literary Archive Foundation" (case-insensitive)
-        r"^project gutenberg literary archive foundation",  # Full organization name
-        r"www\.gutenberg\.org",  # URLs
-        r"\(ebook\s+\d+\)",  # eBook numbers like "(eBook #844)"
-        r"release\s+date:",  # Release date lines
-        r"most\s+recently\s+updated:",  # Update dates
-        r"language:\s*[a-z]+",  # Language declarations
-        r"other\s+information",  # Other information lines
-        r"credits:",  # Credits section
-        r"\.foundation\.",  # ". Foundation." (trailing punctuation)
-    ]
-
     def __init__(self, path: Path):
         """Initialize with the path to the source text file.
 
@@ -67,16 +21,12 @@ class FileReader:
 
     def read(
         self,
-        skip_header: bool = True,
-        skip_footer: bool = True,
         start_line: int = 1,
         end_line: Optional[int] = None,
     ) -> List[str]:
-        """Read and parse source text file with optional filtering.
+        """Read and parse source text file with line range filtering.
 
         Args:
-            skip_header: Skip Project Gutenberg header sections (license, title page).
-            skip_footer: Skip Project Gutenberg footer markers.
             start_line: Start reading from this 1-based line number. Defaults to 1.
             end_line: Stop at this 1-based line number, or None to read to end.
 
@@ -102,56 +52,10 @@ class FileReader:
         if self._raw_lines and self._raw_lines[-1] == "":
             self._raw_lines.pop()
 
-        # Filter header/footer sections if requested
-        filtered_lines = self._filter_header_footer(self._raw_lines, skip_header, skip_footer)
-        
         # Apply start/end line filtering with validation
-        self._filtered_lines = self._apply_line_range(filtered_lines, start_line, end_line)
+        self._filtered_lines = self._apply_line_range(self._raw_lines, start_line, end_line)
         
         return self._filtered_lines
-
-    def _filter_header_footer(
-        self, lines: List[str], skip_header: bool, skip_footer: bool
-    ) -> List[str]:
-        """Filter out header/footer sections based on markers.
-
-        Args:
-            lines: List of raw lines from the file.
-            skip_header: Whether to skip header sections.
-            skip_footer: Whether to skip footer sections.
-
-        Returns:
-            Filtered list of lines with headers/footers removed.
-        """
-        if not (skip_header or skip_footer):
-            return lines
-
-        result = []
-        found_start_marker = False
-        found_end_marker = False
-        
-        for line in lines:
-            # Check for Project Gutenberg START/END markers
-            line_lower = line.lower().strip()
-            
-            if skip_header and self._is_pg_start_marker(line):
-                # Found the start marker - everything after this is content (until end marker)
-                found_start_marker = True
-                continue  # Skip the start marker line itself
-            
-            if skip_footer and self._is_pg_end_marker(line):
-                # Found the end marker - stop processing here
-                found_end_marker = True
-                break
-            
-            # If we haven't seen a start marker yet, this is header content to skip
-            if not found_start_marker:
-                continue  # Skip all pre-start-marker lines (metadata, license, etc.)
-            
-            # After seeing start marker but before end marker, include content
-            result.append(line)
-
-        return result
 
     def _match_pattern(self, pattern: str, text: str) -> bool:
         """Match a regex pattern against text.
@@ -165,38 +69,6 @@ class FileReader:
         """
         import re
         return bool(re.search(pattern, text))
-
-    def _is_pg_header(self, line: str) -> bool:
-        """Check if a line is a Project Gutenberg header marker.
-
-        Args:
-            line: A single line from the file.
-
-        Returns:
-            True if the line matches a known PG header pattern.
-        """
-        # Use word boundary matching to avoid false positives
-        line_lower = " ".join(line.lower().split())  # Normalize whitespace
-        for marker in self.PG_HEADER_MARKERS:
-            if marker in line_lower:
-                return True
-        return False
-
-    def _is_pg_footer(self, line: str) -> bool:
-        """Check if a line is a Project Gutenberg footer marker.
-
-        Args:
-            line: A single line from the file.
-
-        Returns:
-            True if the line matches a known PG footer pattern.
-        """
-        # Use word boundary matching to avoid false positives
-        line_lower = " ".join(line.lower().split())  # Normalize whitespace
-        for marker in self.PG_FOOTER_MARKERS:
-            if marker in line_lower:
-                return True
-        return False
 
     def _apply_line_range(
         self, lines: List[str], start_line: int, end_line: Optional[int]
@@ -376,13 +248,6 @@ class FileReader:
         if not stripped or stripped.startswith("(") or stripped.startswith("["):
             return False
 
-        # Check against license content patterns - these are NOT character names
-        # Use case-insensitive matching by lowercasing both the pattern and text
-        for pattern in cls.LICENSE_CONTENT_PATTERNS:
-            import re
-            if re.search("(?i)" + pattern, line):
-                return False
-
         # Character names are typically 1-3 words, capitalized
         # May end with period or colon (e.g., "ALGERNON." or "LANE:")
         words = stripped.split()
@@ -477,18 +342,14 @@ class FileReader:
 
 def read_source_file(
     path: Path,
-    skip_header: bool = True,
-    skip_footer: bool = True,
     start_line: int = 1,
     end_line: Optional[int] = None,
     injection_mode: str = "line",
 ) -> List[str]:
-    """Read and parse source text file with optional filtering and grouping.
+    """Read and parse source text file with line range filtering and grouping.
 
     Args:
         path: Path object pointing to the UTF-8 encoded text file.
-        skip_header: Skip Project Gutenberg header sections (license, title page).
-        skip_footer: Skip Project Gutenberg footer markers.
         start_line: Start reading from this 1-based line number. Defaults to 1.
         end_line: Stop at this 1-based line number, or None to read to end.
         injection_mode: How content is grouped - "line", "paragraph", or "character_scene".
@@ -501,14 +362,12 @@ def read_source_file(
         ValueError: If start_line > end_line or invalid injection_mode.
     """
     reader = FileReader(path)
-    lines = reader.read(skip_header, skip_footer, start_line, end_line)
+    lines = reader.read(start_line, end_line)
     return reader.group_by_injection_mode(lines, injection_mode)
 
 
 def get_content_count(
     path: Path,
-    skip_header: bool = True,
-    skip_footer: bool = True,
     start_line: int = 1,
     end_line: Optional[int] = None,
     injection_mode: str = "line",
@@ -517,8 +376,6 @@ def get_content_count(
 
     Args:
         path: Path object pointing to the UTF-8 encoded text file.
-        skip_header: Skip Project Gutenberg header sections.
-        skip_footer: Skip Project Gutenberg footer markers.
         start_line: Start reading from this 1-based line number.
         end_line: Stop at this 1-based line number, or None to read to end.
         injection_mode: How content is grouped.
@@ -527,5 +384,5 @@ def get_content_count(
         Number of content units (lines/paragraphs/scenes) available for injection.
     """
     reader = FileReader(path)
-    lines = reader.read(skip_header, skip_footer, start_line, end_line)
+    lines = reader.read(start_line, end_line)
     return len(reader.group_by_injection_mode(lines, injection_mode))
