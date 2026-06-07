@@ -30,8 +30,6 @@ def main():
     # Read and group content using character_scene mode (from config)
     reader = FileReader(source_path)
     lines = reader.read(
-        skip_header=config["source"]["skip_header"],
-        skip_footer=config["source"]["skip_footer"],
         start_line=config["source"]["start_line"],
         end_line=config["source"]["end_line"],
     )

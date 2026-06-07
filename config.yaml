@@ -7,28 +7,10 @@ discord:
   channel_id: "123456789012345678"
 
 source:
-  # Path to the source text file (relative or absolute path)
-  # This file should be UTF-8 encoded
   file_path: "./books/test_book.txt"
-  
-  # Skip Project Gutenberg header sections (license, title page, etc.)
-  skip_header: true
-  
-  # Skip Project Gutenberg footer markers
-  skip_footer: true
-  
-  # Start reading from line number (1-based)
-  # Default is 30 to skip PG headers; adjust if your file has different structure
-  start_line: 30
-  
-  # Optional: Stop at this line number. Set to null or omit to read to end of file
-  end_line: null
-  
-  # Injection mode - how content is grouped before sending:
-  # "line"    - Send each line individually (default)
-  # "paragraph" - Group consecutive non-empty lines into paragraphs
-  # "character_scene" - Separate character names from dialogue and stage directions (for plays)
-  injection_mode: "line"
+  start_line: 1  # Default to line 1, user specifies where to start
+  end_line: null  # Optional - stop at this line number
+  injection_mode: "line"  # Options: "line", "paragraph", "character_scene"
 
 schedule:
   # Base seconds between injections (e.g., 180 = 3 minutes)

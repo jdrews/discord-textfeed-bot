@@ -11,9 +11,7 @@ class ConfigData:
     """Container for all configuration values."""
     discord_channel_id: int
     source_file_path: Path
-    skip_header: bool = True
-    skip_footer: bool = True
-    start_line: int = 30
+    start_line: int = 1
     end_line: Optional[int] = None
     injection_mode: str = "line"
     interval_seconds: int = 180
@@ -103,8 +101,6 @@ class ConfigLoader:
         return ConfigData(
             discord_channel_id=self._parse_int(discord_config, "channel_id"),
             source_file_path=self._parse_source_file(source_config),
-            skip_header=source_config.get("skip_header", True),
-            skip_footer=source_config.get("skip_footer", True),
             start_line=self._parse_start_line(source_config),
             end_line=self._parse_end_line(source_config),
             injection_mode=source_config.get("injection_mode", "line"),
@@ -162,7 +158,7 @@ class ConfigLoader:
             source_config: Configuration dictionary for the source section.
 
         Returns:
-            Start line number (1-based). Defaults to 30 if not specified.
+            Start line number (1-based). Defaults to 1 if not specified.
 
         Raises:
             ValueError: If value is invalid or negative.
@@ -175,8 +171,8 @@ class ConfigLoader:
                 )
             return start_line
 
-        # Default to line 30 (skips Project Gutenberg header)
-        return 30
+        # Default to line 1 (read from beginning)
+        return 1
 
     def _parse_end_line(self, source_config: Dict[str, Any]) -> Optional[int]:
         """Parse the end line number.
@@ -263,30 +259,6 @@ class ConfigLoader:
         if not file_path.exists():
             raise FileNotFoundError(f"Source file does not exist: {file_path}")
         return file_path
-
-    def get_skip_header(self) -> bool:
-        """Get header skip setting from validated config.
-
-        Returns:
-            True to skip Project Gutenberg header sections, False otherwise.
-
-        Raises:
-            RuntimeError: If configuration has not been loaded.
-        """
-        self._ensure_loaded()
-        return self._validated_config.skip_header
-
-    def get_skip_footer(self) -> bool:
-        """Get footer skip setting from validated config.
-
-        Returns:
-            True to skip Project Gutenberg footer markers, False otherwise.
-
-        Raises:
-            RuntimeError: If configuration has not been loaded.
-        """
-        self._ensure_loaded()
-        return self._validated_config.skip_footer
 
     def get_start_line(self) -> int:
         """Get start line number from validated config.

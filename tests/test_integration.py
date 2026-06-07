@@ -164,7 +164,6 @@ discord:
   channel_id: "123456789"
 source:
   file_path: "./test.txt"
-  skip_header: true
   start_line: 1
 schedule:
   interval_seconds: 1

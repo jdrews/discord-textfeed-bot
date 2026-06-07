@@ -146,8 +146,6 @@ class TextFeedBot:
 
         # Read source file
         lines = FileReader(source_path).read(
-            skip_header=self.config.skip_header,
-            skip_footer=self.config.skip_footer,
             start_line=self.config.start_line,
             end_line=self.config.end_line,
         )

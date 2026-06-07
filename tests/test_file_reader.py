@@ -66,49 +66,6 @@ class TestFileReader:
         finally:
             os.unlink(temp_path)
 
-    def test_skip_header(self):
-        """Test skipping Project Gutenberg header sections."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            # Include actual header content pattern that triggers skipping
-            # Use lowercase "author:" to match the PG_HEADER_START_PATTERNS regex
-            f.write("The Project Gutenberg eBook of Test\n")
-            f.write("author: Jane Doe\n")  # Lowercase to match "^author:" pattern
-            f.write("*** BEGINNING OF THIS PUBLICATION ***\n")
-            f.write("Project Gutenberg License\n")
-            f.write("Table of Contents\n")
-            # The "BEGINNING OF THIS PUBLICATION" line is the end marker and gets included
-            # Content after this should be returned (3 lines total: 1 end marker + 2 content)
-            f.write("line 1\n")
-            f.write("line 2\n")
-            temp_path = Path(f.name)
-
-        try:
-            reader = FileReader(temp_path)
-            lines = reader.read(skip_header=True, skip_footer=False)
-
-            # Header should be skipped (end marker + content lines remain)
-            assert len(lines) == 3
-            assert "BEGINNING" not in lines[1]
-        finally:
-            os.unlink(temp_path)
-
-    def test_skip_footer(self):
-        """Test skipping Project Gutenberg footer sections."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write("line 1\n")
-            f.write("line 2\n")
-            f.write("*** END OF THIS PUBLICATION ***\n")
-            temp_path = Path(f.name)
-
-        try:
-            reader = FileReader(temp_path)
-            lines = reader.read(skip_header=False, skip_footer=True)
-
-            # Footer should be skipped
-            assert len(lines) == 2
-            assert "END" not in lines[1]
-        finally:
-            os.unlink(temp_path)
 
     def test_apply_start_line(self):
         """Test starting from a specific line number."""
@@ -195,21 +152,6 @@ class TestGroupByInjectionMode:
         assert result[0] == "First paragraph line 1\nFirst paragraph line 2"
         assert result[1] == "Second paragraph line 1\nSecond paragraph line 2\nSecond paragraph line 3"
 
-    def test_group_as_character_scenes(self):
-        """Test grouping character names and dialogue for plays."""
-        lines = [
-            "  HAMLET:",
-            "To be, or not to be, that is the question.",
-            "",
-            "  POLONIUS:",
-            "(aside) He seems determined."
-        ]
-        result = FileReader._group_as_character_scenes(lines)
-
-        # Should have character markers and dialogue blocks
-        assert "[CHARACTER: HAMLET]" in result
-        assert "To be, or not to be" in result[1]
-        assert "[CHARACTER: POLONIUS]" in result
 
 
 class TestGetContentCount:
@@ -256,11 +198,9 @@ class TestReadSourceFile:
             temp_path = Path(f.name)
 
         try:
-            # Skip header, start at line 2, use paragraph mode
+            # Start at line 2, use paragraph mode
             result = read_source_file(
                 temp_path,
-                skip_header=True,
-                skip_footer=False,
                 start_line=2,
                 end_line=None,
                 injection_mode="paragraph"

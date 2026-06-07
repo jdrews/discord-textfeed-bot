@@ -177,22 +177,13 @@ logging:
 class TestConfigDataDefaults:
     """Test cases for default values in ConfigData."""
 
-    def test_default_skip_header_footer(self):
-        """Test that skip_header and skip_footer default to True."""
-        config = ConfigData(
-            discord_channel_id=123,
-            source_file_path=Path("/test.txt")
-        )
-        assert config.skip_header is True
-        assert config.skip_footer is True
-
     def test_default_start_line(self):
-        """Test that start_line defaults to 30."""
+        """Test that start_line defaults to 1."""
         config = ConfigData(
             discord_channel_id=123,
             source_file_path=Path("/test.txt")
         )
-        assert config.start_line == 30
+        assert config.start_line == 1
 
     def test_default_injection_mode(self):
         """Test that injection_mode defaults to 'line'."""
@@ -259,7 +250,6 @@ discord:
   channel_id: "987654321"
 source:
   file_path: "./books/test.txt"
-  skip_header: false
   start_line: 50
 schedule:
   interval_seconds: 300
@@ -276,7 +266,6 @@ logging:
 
             assert loader.get_channel_id() == 987654321
             assert str(loader.get_source_file_path()) in ("./books/test.txt", "books/test.txt")
-            assert loader.get_skip_header() is False
             assert loader.get_start_line() == 50
             assert loader.get_interval_seconds() == 300
             assert loader.get_randomization_seconds() == 60
